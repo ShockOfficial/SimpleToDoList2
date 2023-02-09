@@ -1,7 +1,6 @@
 let $rightBox;
 let $leftBox;
 let $newTask;
-let $responsiveId = 1;
 let $mainInput;
 let $btnAdd;
 let $btnCancel;
@@ -12,6 +11,7 @@ let $taskCat;
 function main() {
 	prepareDomElements();
 	prepareDomEvents();
+  loadDataFromStorage()
 }
 
 function prepareDomElements() {
@@ -68,22 +68,22 @@ function onDrop(e) {
 		sortTasks();
 	}
 	e.dataTransfer.clearData();
+  saveCurrentState();
 }
 
-function createTask() {
-	if ($mainInput.value !== '') {
+function createTask(text, category,id, isLeft = true) {
+	if ($mainInput.value !== '' || text !== '') {
 		let newDiv = document.createElement('div');
 		let toolbox = document.createElement('div');
 		let catBox = document.createElement('div');
 		$taskCat = document.createElement('p');
 
 		toolbox.classList.add('tools');
-		newDiv.classList.add('newTask', 'cat-C');
+		newDiv.classList.add('newTask', `cat-${category || "C"}`);
 		newDiv.setAttribute('ondragstart', 'onDragStart(event);');
 		newDiv.setAttribute('draggable', 'true');
-		newDiv.setAttribute('id', $responsiveId);
-		$responsiveId++;
-
+		newDiv.setAttribute('id', id || crypto.randomUUID());
+    
 		let btnComplete = document.createElement('button');
 		btnComplete.classList.add('complete');
 		btnComplete.innerHTML =
@@ -102,7 +102,7 @@ function createTask() {
 
 		let taskText = document.createElement('p');
 		taskText.classList.add('task-text');
-		taskText.innerText = $mainInput.value;
+		taskText.innerText = typeof text === 'string' ? text :  $mainInput.value;
 
 		let btnA = document.createElement('button');
 		btnA.innerText = 'A';
@@ -118,18 +118,65 @@ function createTask() {
 		btnC.addEventListener('click', setCategory);
 
 		$taskCat.classList.add('task-cat');
-		$taskCat.innerText = 'C';
+		$taskCat.innerText = category || "C";
 
 		catBox.classList.add('cat-box');
 		catBox.append(btnA, btnB, btnC);
 		toolbox.append(btnComplete, btnEdit, btnDelete);
 		newDiv.append($taskCat, catBox, taskText, toolbox);
-		$leftBox.append(newDiv);
+
+    if(isLeft){
+  		$leftBox.append(newDiv);
+    }else{
+      const complete = newDiv.querySelector('.complete');
+      newDiv.classList.add('done');
+      $rightBox.append(newDiv);
+      newDiv.classList.remove('cat-' + newDiv.querySelector('.task-cat').
+      innerText);
+      complete.classList.add('notComplete');
+
+    }
 
 		$mainInput.value = '';
+    saveCurrentState();
 	} else {
 		displayPopup('Musisz coś wpisać!');
 	}
+}
+
+function saveCurrentState() {
+	localStorage.removeItem('state');
+	const activeTasks = Array.from($leftBox.querySelectorAll('div.newTask'));
+	const doneTasks = Array.from($rightBox.querySelectorAll('div.newTask.done'));
+  
+  const data = JSON.stringify(
+    {activeTasks: activeTasks.map(item => {
+      const text = item.querySelector('p.task-text').innerText
+      const category = item.querySelector('p.task-cat').innerText
+      return JSON.stringify({text,category,id:item.id})
+    }),
+    doneTasks: doneTasks.map(item =>  {
+      const text = item.querySelector('p.task-text').innerText
+      const category = item.querySelector('p.task-cat').innerText
+      return JSON.stringify({text,category,id: item.id})
+    })})
+  localStorage.setItem('state',data);
+}
+
+function loadDataFromStorage(){
+  const {activeTasks, doneTasks} = JSON.parse(localStorage.getItem('state'))
+  activeTasks.forEach((item) => {
+    item = JSON.parse(item);
+    createTask(item.text,item.category,item.id)
+  })
+
+  doneTasks.forEach((item) => {
+    item = JSON.parse(item);
+    createTask(item.text,item.category,item.id,false);
+  })
+
+  sortTasks()
+
 }
 
 function displayPopup(info) {
@@ -174,11 +221,13 @@ function makeComplete(e) {
 
 		sortTasks();
 	}
+  saveCurrentState();
 }
 
 function makeDelete(e) {
 	let task = e.target.closest('.newTask');
 	task.remove();
+  saveCurrentState();
 }
 
 function editTask(e) {
@@ -195,9 +244,13 @@ function editTask(e) {
 		btnAdd.addEventListener('click', () => {
 			taskText.innerText = input.value;
 			$popup.classList.add('hide');
+      saveCurrentState();
+
 		});
 		btnCancel.addEventListener('click', () => {
 			$popup.classList.add('hide');
+      saveCurrentState();
+
 		});
 
 		input.addEventListener('keyup', (e) => {
@@ -205,8 +258,11 @@ function editTask(e) {
 			if (listenEnter(e)) {
 				taskText.innerText = input.value;
 				$popup.classList.add('hide');
+        saveCurrentState();
+
 			}
-		});
+		})
+
 	} else {
 		displayPopup('Nie możesz edytować skończonego zadania.');
 	}
@@ -224,6 +280,7 @@ function setCategory(e) {
 		rootTask.classList.remove('cat-' + lastCategory);
 		rootTask.classList.add('cat-' + category);
 		sortTasks();
+    saveCurrentState();
 	} else {
 		displayPopup('Nie możesz zmieniać kategorii skończonego zadania');
 	}
